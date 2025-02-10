@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart'; // For clipboard access
 
 /// A simple Note model with text and a timestamp.
 class Note {
@@ -95,6 +97,96 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   /////////// Persistence Methods ///////////
+
+Future<String?> _showImportChoiceDialog() async {
+  return showDialog<String>(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text("Import Data"),
+        content: const Text("Choose how you want to import your data."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, "file"),
+            child: const Text("From File"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, "clipboard"),
+            child: const Text("From Clipboard"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text("Cancel"),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+/// Imports LoopNotes data from a file or clipboard.
+Future<void> _importData() async {
+  try {
+    // Ask the user whether they want to import from a file or clipboard
+    String? choice = await _showImportChoiceDialog();
+    if (choice == null) return; // User canceled
+
+    String jsonData = "";
+
+    if (choice == "file") {
+      // Pick a JSON file
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+
+      if (result != null && result.files.single.path != null) {
+        File file = File(result.files.single.path!);
+        jsonData = await file.readAsString();
+      }
+    } else if (choice == "clipboard") {
+      // Get JSON data from clipboard
+      ClipboardData? clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      if (clipboardData != null) {
+        jsonData = clipboardData.text!;
+      }
+    }
+
+    if (jsonData.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No valid data found to import.")),
+      );
+      return;
+    }
+
+    // Parse the JSON and update the app state
+    Map<String, dynamic> data = jsonDecode(jsonData);
+    List<ListItem> importedItems = (data["items"] as List)
+        .map((itemJson) => ListItem.fromJson(itemJson))
+        .toList();
+    int importedIndex = data["activeIndex"] ?? 0;
+
+    // Update the state
+    setState(() {
+      _items = importedItems;
+      _activeIndex = (importedIndex >= 0 && importedIndex < _items.length)
+          ? importedIndex
+          : 0;
+    });
+
+    // Save the imported data
+    await _saveData();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Import successful!")),
+    );
+  } catch (e) {
+    print("Error importing data: $e");
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Failed to import data.")),
+    );
+  }
+}
 
   /// Returns the local file used for data persistence (mobile only).
   Future<File> _getLocalFile() async {
@@ -484,16 +576,24 @@ Future<void> _exportData() async {
   Widget _buildManageScreen() {
   return Column(
     children: [
-      // Export button
       Padding(
         padding: const EdgeInsets.all(8.0),
-        child: ElevatedButton.icon(
-          onPressed: _exportData,
-          icon: const Icon(Icons.share),
-          label: const Text("Export Data"),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            ElevatedButton.icon(
+              onPressed: _exportData,
+              icon: const Icon(Icons.share),
+              label: const Text("Export"),
+            ),
+            ElevatedButton.icon(
+              onPressed: _importData,
+              icon: const Icon(Icons.upload_file),
+              label: const Text("Import"),
+            ),
+          ],
         ),
       ),
-      // Manage List View
       Expanded(
         child: _items.isEmpty
             ? const Center(child: Text("No items. Add some using the button below."))
