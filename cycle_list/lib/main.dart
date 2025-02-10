@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// A simple Note model with text and a timestamp.
 class Note {
@@ -133,6 +134,27 @@ class _MyHomePageState extends State<MyHomePage> {
       await file.writeAsString(data);
     }
   }
+
+  /// Exports and shares the LoopNotes data.
+Future<void> _exportData() async {
+  try {
+    // Convert items to a JSON string
+    Map<String, dynamic> data = {
+      "activeIndex": _activeIndex,
+      "items": _items.map((item) => item.toJson()).toList(),
+    };
+    String jsonData = jsonEncode(data);
+
+    // Share the JSON data
+    await Share.share(jsonData, subject: "Exported LoopNotes Data");
+
+  } catch (e) {
+    print("Error exporting data: $e");
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Failed to export data."))
+    );
+  }
+}
 
   /// Loads the list items (with notes) and active index.
   Future<void> _loadData() async {
@@ -460,38 +482,54 @@ class _MyHomePageState extends State<MyHomePage> {
 
   /// Builds the Manage mode screen with a reorderable list.
   Widget _buildManageScreen() {
-  return _items.isEmpty
-      ? const Center(child: Text("No items. Add some using the button below."))
-      : ReorderableListView(
-          onReorder: (oldIndex, newIndex) {
-            _reorderItem(oldIndex, newIndex);
-          },
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          children: [
-            for (int index = 0; index < _items.length; index++)
-              Card(  // Wrap each ListTile in a Card for better UI and reordering
-                key: ValueKey(_items[index].id),  // Ensures unique identification
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: ListTile(
-                  title: Text(_items[index].title),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () => _showEditItemDialog(index),
+  return Column(
+    children: [
+      // Export button
+      Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: ElevatedButton.icon(
+          onPressed: _exportData,
+          icon: const Icon(Icons.share),
+          label: const Text("Export Data"),
+        ),
+      ),
+      // Manage List View
+      Expanded(
+        child: _items.isEmpty
+            ? const Center(child: Text("No items. Add some using the button below."))
+            : ReorderableListView(
+                onReorder: (oldIndex, newIndex) {
+                  _reorderItem(oldIndex, newIndex);
+                },
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                children: [
+                  for (int index = 0; index < _items.length; index++)
+                    Card(
+                      key: ValueKey(_items[index].id),
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: ListTile(
+                        title: Text(_items[index].title),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit),
+                              onPressed: () => _showEditItemDialog(index),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete),
+                              onPressed: () => _removeItem(index),
+                            ),
+                            const Icon(Icons.drag_handle),
+                          ],
+                        ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete),
-                        onPressed: () => _removeItem(index),
-                      ),
-                      const Icon(Icons.drag_handle), // Visual cue for dragging
-                    ],
-                  ),
-                ),
+                    ),
+                ],
               ),
-          ],
-        );
+      ),
+    ],
+  );
 }
 
   @override
