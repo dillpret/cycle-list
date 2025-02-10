@@ -1,4 +1,4 @@
-package com.example.cycle_list
+package com.dillon.loopnotes
 
 import io.flutter.embedding.android.FlutterActivity
 

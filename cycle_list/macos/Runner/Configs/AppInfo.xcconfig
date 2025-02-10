@@ -8,7 +8,7 @@
 PRODUCT_NAME = cycle_list
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.cycleList
+PRODUCT_BUNDLE_IDENTIFIER = com.dillon.loopnotes
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2025 com.example. All rights reserved.

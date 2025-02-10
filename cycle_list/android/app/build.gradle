@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.loopnotes"
+    namespace = "com.dillon.loopnotes"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 

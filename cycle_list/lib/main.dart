@@ -32,7 +32,7 @@ class ListItem {
   List<Note> notes;
 
   ListItem({required this.id, required this.title, List<Note>? notes})
-      : this.notes = notes ?? [];
+      : notes = notes ?? [];
 
   factory ListItem.fromJson(Map<String, dynamic> json) {
     return ListItem(
@@ -55,6 +55,8 @@ void main() => runApp(MyApp());
 
 /// The root widget of the application.
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -67,6 +69,8 @@ class MyApp extends StatelessWidget {
 
 /// The main page holding the list state and two modes: View and Manage.
 class MyHomePage extends StatefulWidget {
+  const MyHomePage({super.key});
+
   @override
   _MyHomePageState createState() => _MyHomePageState();
 }
@@ -224,24 +228,26 @@ class _MyHomePageState extends State<MyHomePage> {
 
   /// Reorders items in the list and adjusts the active index accordingly.
   void _reorderItem(int oldIndex, int newIndex) {
-    setState(() {
-      if (newIndex > oldIndex) {
-        newIndex--;
-      }
-      final item = _items.removeAt(oldIndex);
-      _items.insert(newIndex, item);
+  setState(() {
+    if (newIndex > oldIndex) {
+      newIndex--;  // Adjust because items shift when removed
+    }
+    
+    final movedItem = _items.removeAt(oldIndex);
+    _items.insert(newIndex, movedItem);
 
-      // Update the active index to follow the same item if it was moved.
-      if (_activeIndex == oldIndex) {
-        _activeIndex = newIndex;
-      } else if (oldIndex < _activeIndex && _activeIndex <= newIndex) {
-        _activeIndex--;
-      } else if (newIndex <= _activeIndex && _activeIndex < oldIndex) {
-        _activeIndex++;
-      }
-    });
-    _saveData();
-  }
+    // Update _activeIndex to maintain the same item in View Mode
+    if (_activeIndex == oldIndex) {
+      _activeIndex = newIndex;
+    } else if (oldIndex < _activeIndex && _activeIndex <= newIndex) {
+      _activeIndex--;  // Shift active index down if necessary
+    } else if (newIndex <= _activeIndex && _activeIndex < oldIndex) {
+      _activeIndex++;  // Shift active index up if necessary
+    }
+  });
+
+  _saveData();  // Save the updated order
+}
 
   /// Displays a dialog to add a new item.
   Future<void> _showAddItemDialog() async {
@@ -454,18 +460,19 @@ class _MyHomePageState extends State<MyHomePage> {
 
   /// Builds the Manage mode screen with a reorderable list.
   Widget _buildManageScreen() {
-    return _items.isEmpty
-        ? const Center(
-            child: Text("No items. Add some using the button below."))
-        : ReorderableListView(
-            onReorder: (oldIndex, newIndex) {
-              _reorderItem(oldIndex, newIndex);
-            },
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            children: [
-              for (int index = 0; index < _items.length; index++)
-                ListTile(
-                  key: ValueKey("item_${_items[index].id}"),
+  return _items.isEmpty
+      ? const Center(child: Text("No items. Add some using the button below."))
+      : ReorderableListView(
+          onReorder: (oldIndex, newIndex) {
+            _reorderItem(oldIndex, newIndex);
+          },
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          children: [
+            for (int index = 0; index < _items.length; index++)
+              Card(  // Wrap each ListTile in a Card for better UI and reordering
+                key: ValueKey(_items[index].id),  // Ensures unique identification
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: ListTile(
                   title: Text(_items[index].title),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -478,12 +485,14 @@ class _MyHomePageState extends State<MyHomePage> {
                         icon: const Icon(Icons.delete),
                         onPressed: () => _removeItem(index),
                       ),
+                      const Icon(Icons.drag_handle), // Visual cue for dragging
                     ],
                   ),
-                )
-            ],
-          );
-  }
+                ),
+              ),
+          ],
+        );
+}
 
   @override
   Widget build(BuildContext context) {
