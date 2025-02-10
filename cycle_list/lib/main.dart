@@ -1,5 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// A simple Note model with text and a timestamp.
@@ -73,6 +77,7 @@ class MyHomePage extends StatefulWidget {
 /// - [_items]: the list of items (each with its own notes)
 /// - [_activeIndex]: the index of the currently active item
 /// - [_currentTabIndex]: 0 for "View" mode, 1 for "Manage" mode
+/// - Data is persisted either to a local file (mobile) or to SharedPreferences (web).
 class _MyHomePageState extends State<MyHomePage> {
   int _currentTabIndex = 0; // 0: View mode, 1: Manage mode
   List<ListItem> _items = [];
@@ -84,47 +89,86 @@ class _MyHomePageState extends State<MyHomePage> {
     _loadData();
   }
 
-  /// Loads the list items (with notes) and active index from persistent storage.
-  Future<void> _loadData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String? itemsDataString = prefs.getString('itemsData');
-    final int? storedActiveIndex = prefs.getInt('activeIndex');
+  /////////// Persistence Methods ///////////
 
-    if (itemsDataString != null) {
-      try {
-        final List<dynamic> decoded = jsonDecode(itemsDataString);
-        _items =
-            decoded.map((itemJson) => ListItem.fromJson(itemJson)).toList();
-      } catch (e) {
-        // If an error occurs during decoding, initialize a default list.
-        _items = [
-          ListItem(id: '1', title: 'Item 1'),
-          ListItem(id: '2', title: 'Item 2'),
-          ListItem(id: '3', title: 'Item 3'),
-        ];
-      }
+  /// Returns the local file used for data persistence (mobile only).
+  Future<File> _getLocalFile() async {
+    final directory = await getApplicationDocumentsDirectory();
+    return File('${directory.path}/loopnotes_data.json');
+  }
+
+  /// Loads the saved data as a JSON string.
+  Future<String?> _loadDataString() async {
+    if (kIsWeb) {
+      // On web, use SharedPreferences.
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString("loopnotes_data");
     } else {
-      // Default list if nothing is stored yet.
+      // On mobile/desktop, use a local file.
+      try {
+        final file = await _getLocalFile();
+        if (await file.exists()) {
+          return await file.readAsString();
+        }
+      } catch (e) {
+        print("Error loading file data: $e");
+      }
+      return null;
+    }
+  }
+
+  /// Saves the given JSON string.
+  Future<void> _saveDataString(String data) async {
+    if (kIsWeb) {
+      // On web, save using SharedPreferences.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString("loopnotes_data", data);
+    } else {
+      // On mobile/desktop, save to a local file.
+      final file = await _getLocalFile();
+      await file.writeAsString(data);
+    }
+  }
+
+  /// Loads the list items (with notes) and active index.
+  Future<void> _loadData() async {
+    String? contents = await _loadDataString();
+    if (contents != null && contents.isNotEmpty) {
+      try {
+        final Map<String, dynamic> data = jsonDecode(contents);
+        setState(() {
+          _activeIndex = data["activeIndex"] ?? 0;
+          _items = (data["items"] as List)
+              .map((itemJson) => ListItem.fromJson(itemJson))
+              .toList();
+        });
+        return;
+      } catch (e) {
+        print("Error decoding data: $e");
+      }
+    }
+    // If no saved data, initialize with a default list.
+    setState(() {
       _items = [
         ListItem(id: '1', title: 'Item 1'),
         ListItem(id: '2', title: 'Item 2'),
         ListItem(id: '3', title: 'Item 3'),
       ];
-    }
-    _activeIndex = (storedActiveIndex != null && storedActiveIndex < _items.length)
-        ? storedActiveIndex
-        : 0;
-    setState(() {});
+      _activeIndex = 0;
+    });
   }
 
   /// Saves the current list (including notes) and active index.
   Future<void> _saveData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final String encodedItems =
-        jsonEncode(_items.map((item) => item.toJson()).toList());
-    await prefs.setString('itemsData', encodedItems);
-    await prefs.setInt('activeIndex', _activeIndex);
+    Map<String, dynamic> data = {
+      "activeIndex": _activeIndex,
+      "items": _items.map((item) => item.toJson()).toList(),
+    };
+    String jsonData = jsonEncode(data);
+    await _saveDataString(jsonData);
   }
+
+  /////////// End Persistence Methods ///////////
 
   /// Cycles to the next item (in circular fashion) and saves the new active index.
   void _cycleNext() {
@@ -139,8 +183,7 @@ class _MyHomePageState extends State<MyHomePage> {
   void _cyclePrevious() {
     if (_items.isEmpty) return;
     setState(() {
-      _activeIndex =
-          (_activeIndex - 1 + _items.length) % _items.length;
+      _activeIndex = (_activeIndex - 1 + _items.length) % _items.length;
     });
     _saveData();
   }
@@ -238,7 +281,8 @@ class _MyHomePageState extends State<MyHomePage> {
   /// Displays a dialog to edit an existing item.
   Future<void> _showEditItemDialog(int index) async {
     String editedTitle = _items[index].title;
-    TextEditingController controller = TextEditingController(text: editedTitle);
+    TextEditingController controller =
+        TextEditingController(text: editedTitle);
     await showDialog(
       context: context,
       builder: (context) {
@@ -333,7 +377,8 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget _buildViewScreen() {
     if (_items.isEmpty) {
       return const Center(
-          child: Text("No items available. Please add items in manage mode."));
+        child: Text("No items available. Please add items in manage mode."),
+      );
     }
     final currentItem = _items[_activeIndex];
     return Column(
@@ -410,7 +455,8 @@ class _MyHomePageState extends State<MyHomePage> {
   /// Builds the Manage mode screen with a reorderable list.
   Widget _buildManageScreen() {
     return _items.isEmpty
-        ? const Center(child: Text("No items. Add some using the button below."))
+        ? const Center(
+            child: Text("No items. Add some using the button below."))
         : ReorderableListView(
             onReorder: (oldIndex, newIndex) {
               _reorderItem(oldIndex, newIndex);
